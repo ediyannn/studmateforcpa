@@ -76,6 +76,31 @@ async function generateWithModelFallback(params: {
   return null;
 }
 
+// Helper to parse Gemini JSON responses robustly (stripping markdown fences)
+function parseGeminiJson(rawText: string) {
+  if (!rawText) return null;
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```[a-z]*\n?/i, '');
+    cleaned = cleaned.replace(/```\s*$/, '');
+    cleaned = cleaned.trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    const firstBrace = cleaned.search(/[\{\[]/);
+    const lastBrace = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+      } catch (err2) {
+        console.warn('Failed secondary JSON parse extraction:', err2);
+      }
+    }
+    throw e;
+  }
+}
+
 // --------------------------------------------------------------------------
 // Heuristic Content Extractor (Fallback when no API key or offline)
 // --------------------------------------------------------------------------
@@ -213,7 +238,7 @@ CRITICAL INSTRUCTIONS:
 
       if (aiResult?.text) {
         try {
-          const parsed = JSON.parse(aiResult.text);
+          const parsed = parseGeminiJson(aiResult.text);
           return res.json({ success: true, analysis: parsed, model: aiResult.modelUsed });
         } catch (parseError) {
           console.log('[Analyze Material] JSON parse fallback cleaner used.');
@@ -360,7 +385,7 @@ CRITICAL RULES:
 
         if (aiResult?.text) {
         try {
-          const parsed = JSON.parse(aiResult.text);
+          const parsed = parseGeminiJson(aiResult.text);
           return res.json({ success: true, questions: parsed, model: aiResult.modelUsed });
         } catch (parseErr) {
           console.log('[Quiz Generator] Fallback to structured analytical generator.');
@@ -591,7 +616,7 @@ CRITICAL RULES:
 
       if (aiResult?.text) {
         try {
-          const parsed = JSON.parse(aiResult.text);
+          const parsed = parseGeminiJson(aiResult.text);
           if (Array.isArray(parsed) && parsed.length > 0) {
             return res.json({ success: true, cards: parsed.slice(0, count), model: aiResult.modelUsed });
           }
@@ -730,7 +755,7 @@ Return a valid JSON object:
 
       if (aiResult?.text) {
         try {
-          const parsed = JSON.parse(aiResult.text);
+          const parsed = parseGeminiJson(aiResult.text);
           return res.json({ success: true, activities: parsed, model: aiResult.modelUsed });
         } catch (parseErr) {
           console.warn('Failed to parse activities JSON from model:', parseErr);
@@ -845,7 +870,7 @@ Return a JSON object:
 
       if (aiResult?.text) {
         try {
-          const parsed = JSON.parse(aiResult.text);
+          const parsed = parseGeminiJson(aiResult.text);
           return res.json({ success: true, evaluation: parsed, model: aiResult.modelUsed });
         } catch (parseErr) {
           console.warn('Failed to parse evaluation JSON from model:', parseErr);
@@ -1396,4 +1421,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
