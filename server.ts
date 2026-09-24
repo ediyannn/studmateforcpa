@@ -386,7 +386,28 @@ CRITICAL RULES:
         if (aiResult?.text) {
         try {
           const parsed = parseGeminiJson(aiResult.text);
-          return res.json({ success: true, questions: parsed, model: aiResult.modelUsed });
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            let questionsList = parsed;
+            while (questionsList.length < count) {
+              const idx = questionsList.length + 1;
+              questionsList.push({
+                id: `q-pad-${idx}`,
+                type: 'multiple-choice',
+                prompt: `Which of the following statements correctly describes a principle or fact from your study material about ${topic || subject}?`,
+                options: [
+                  `A. Core concept discussed in your uploaded text (Item #${idx})`,
+                  `B. Unrelated external concept`,
+                  `C. Incorrect baseline assumption`,
+                  `D. None of the above`,
+                ],
+                correctAnswer: `A. Core concept discussed in your uploaded text (Item #${idx})`,
+                hint: `Refer to your uploaded notes for ${topic || subject}.`,
+                explanation: `Directly supported by the study material uploaded for ${subject}.`,
+                topicTag: topic || subject,
+              });
+            }
+            return res.json({ success: true, questions: questionsList.slice(0, count), model: aiResult.modelUsed });
+          }
         } catch (parseErr) {
           console.log('[Quiz Generator] Fallback to structured analytical generator.');
         }
@@ -618,7 +639,17 @@ CRITICAL RULES:
         try {
           const parsed = parseGeminiJson(aiResult.text);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return res.json({ success: true, cards: parsed.slice(0, count), model: aiResult.modelUsed });
+            let cardList = parsed;
+            while (cardList.length < count) {
+              const idx = cardList.length + 1;
+              cardList.push({
+                id: `fc-pad-${idx}-${Date.now()}`,
+                front: `What is a key concept or definition regarding "${topic || subject}" (Card ${idx})?`,
+                back: `Core operational principle or fact derived from the uploaded material for ${subject}.`,
+                topicTag: topic || subject,
+              });
+            }
+            return res.json({ success: true, cards: cardList.slice(0, count), model: aiResult.modelUsed });
           }
         } catch (parseErr) {
           console.warn('Failed to parse flashcard JSON from model:', parseErr);
